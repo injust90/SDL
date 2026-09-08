@@ -82,13 +82,13 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         const float distance = -elapsed * point_speeds[i];
         points[i].x -= distance;
         points[i].y += distance;
-        if ((points[i].x <= 0) || (points[i].y <= 0)) {
+        if ((points[i].x >= WINDOW_WIDTH) || (points[i].y <= 0)) {
             /* off the screen; restart it elsewhere! */
             if (SDL_rand(2)) {
                 points[i].x = SDL_randf() * ((float) WINDOW_WIDTH);
                 points[i].y = WINDOW_HEIGHT;
             } else {
-		points[i].x = WINDOW_WIDTH;
+		points[i].x = 0;
 		points[i].y = SDL_randf() * ((float) WINDOW_HEIGHT);
 	    }
             point_speeds[i] = MIN_PIXELS_PER_SECOND + (SDL_randf() * (MAX_PIXELS_PER_SECOND - MIN_PIXELS_PER_SECOND));
