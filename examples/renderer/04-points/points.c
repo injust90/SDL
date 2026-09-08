@@ -18,8 +18,8 @@ static Uint64 last_time = 0;
 #define WINDOW_HEIGHT 480
 
 #define NUM_POINTS 500
-#define MIN_PIXELS_PER_SECOND 30  /* move at least this many pixels per second. */
-#define MAX_PIXELS_PER_SECOND 60  /* move this many pixels per second at most. */
+#define MIN_PIXELS_PER_SECOND 20  /* move at least this many pixels per second. */
+#define MAX_PIXELS_PER_SECOND 80  /* move this many pixels per second at most. */
 
 /* (track everything as parallel arrays instead of a array of structs,
    so we can pass the coordinates to the renderer in a single function call.) */
@@ -79,18 +79,18 @@ SDL_AppResult SDL_AppIterate(void *appstate)
 
     /* let's move all our points a little for a new frame. */
     for (i = 0; i < SDL_arraysize(points); ++i) {
-        const float distance = elapsed * point_speeds[i];
-        points[i].x += distance;
+        const float distance = -elapsed * point_speeds[i];
+        points[i].x -= distance;
         points[i].y += distance;
-        if ((points[i].x >= WINDOW_WIDTH) || (points[i].y >= WINDOW_HEIGHT)) {
+        if ((points[i].x <= 0) || (points[i].y <= 0)) {
             /* off the screen; restart it elsewhere! */
             if (SDL_rand(2)) {
                 points[i].x = SDL_randf() * ((float) WINDOW_WIDTH);
-                points[i].y = 0.0f;
+                points[i].y = WINDOW_HEIGHT;
             } else {
-                points[i].x = 0.0f;
-                points[i].y = SDL_randf() * ((float) WINDOW_HEIGHT);
-            }
+		points[i].x = WINDOW_WIDTH;
+		points[i].y = SDL_randf() * ((float) WINDOW_HEIGHT);
+	    }
             point_speeds[i] = MIN_PIXELS_PER_SECOND + (SDL_randf() * (MAX_PIXELS_PER_SECOND - MIN_PIXELS_PER_SECOND));
         }
     }
