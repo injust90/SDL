@@ -1700,8 +1700,22 @@ SDL_Texture *SDL_CreateTexture(SDL_Renderer *renderer, SDL_PixelFormat format, S
 
 static bool SDL_UpdateTextureFromSurface(SDL_Texture *texture, SDL_Rect *rect, SDL_Surface *surface)
 {
-    bool direct_update;
+    if (SDL_ISPIXELFORMAT_INDEXED(texture->format) && surface->palette) {
+        // Copy the palette to the new texture
+        SDL_Palette *existing = surface->palette;
+        SDL_Palette *palette = SDL_CreatePalette(existing->ncolors);
+        if (palette &&
+            SDL_SetPaletteColors(palette, existing->colors, 0, existing->ncolors) &&
+            SDL_SetTexturePalette(texture, palette)) {
+            // The texture has a reference to the palette now
+            SDL_DestroyPalette(palette);
+        } else {
+            SDL_DestroyPalette(palette);
+            return false;
+        }
+    }
 
+    bool direct_update;
     if (surface->format == texture->format &&
         SDL_GetSurfaceColorspace(surface) == texture->colorspace) {
         if (SDL_ISPIXELFORMAT_INDEXED(surface->format)) {
@@ -1736,21 +1750,6 @@ static bool SDL_UpdateTextureFromSurface(SDL_Texture *texture, SDL_Rect *rect, S
             SDL_UpdateTexture(texture, NULL, temp->pixels, temp->pitch);
             SDL_DestroySurface(temp);
         } else {
-            return false;
-        }
-    }
-
-    if (SDL_ISPIXELFORMAT_INDEXED(texture->format) && surface->palette) {
-        // Copy the palette to the new texture
-        SDL_Palette *existing = surface->palette;
-        SDL_Palette *palette = SDL_CreatePalette(existing->ncolors);
-        if (palette &&
-            SDL_SetPaletteColors(palette, existing->colors, 0, existing->ncolors) &&
-            SDL_SetTexturePalette(texture, palette)) {
-            // The texture has a reference to the palette now
-            SDL_DestroyPalette(palette);
-        } else {
-            SDL_DestroyPalette(palette);
             return false;
         }
     }
@@ -1885,7 +1884,6 @@ SDL_Texture *SDL_CreateTextureFromSurface(SDL_Renderer *renderer, SDL_Surface *s
     SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_ACCESS_NUMBER, SDL_TEXTUREACCESS_STATIC);
     SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_WIDTH_NUMBER, surface->w);
     SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_CREATE_HEIGHT_NUMBER, surface->h);
-    SDL_SetPointerProperty(props, SDL_PROP_TEXTURE_CREATE_PALETTE_POINTER, surface->palette);
 
     texture = SDL_CreateTextureWithProperties(renderer, props);
     SDL_DestroyProperties(props);
@@ -2497,9 +2495,10 @@ bool SDL_UpdateYUVTexture(SDL_Texture *texture, const SDL_Rect *rect,
 
     CHECK_PARAM(texture->format != SDL_PIXELFORMAT_YV12 &&
                 texture->format != SDL_PIXELFORMAT_IYUV &&
-                texture->format != SDL_PIXELFORMAT_P408 &&
-                texture->format != SDL_PIXELFORMAT_P416) {
-        return SDL_SetError("Texture format must be YV12, IYUV, P408, or P416");
+                texture->format != SDL_PIXELFORMAT_I444 &&
+                texture->format != SDL_PIXELFORMAT_I0FL &&
+                texture->format != SDL_PIXELFORMAT_I4FL) {
+        return SDL_SetError("Texture format must be YV12, IYUV, I444, I0FL, or I4FL");
     }
 
     real_rect.x = 0;

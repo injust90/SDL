@@ -25,6 +25,7 @@
 #include "../../events/SDL_windowevents_c.h"
 #include "../../video/SDL_pixels_c.h"
 #include "../../video/SDL_sysvideo.h"
+#include "../../video/SDL_yuv_c.h"
 #include "../SDL_d3dmath.h"
 #include "../SDL_sysrender.h"
 #include "SDL_gpu_util.h"
@@ -288,13 +289,14 @@ static bool GPU_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_
     case SDL_PIXELFORMAT_INDEX8:
     case SDL_PIXELFORMAT_YV12:
     case SDL_PIXELFORMAT_IYUV:
-    case SDL_PIXELFORMAT_P408:
+    case SDL_PIXELFORMAT_I444:
     case SDL_PIXELFORMAT_NV12:
     case SDL_PIXELFORMAT_NV21:
         format = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
         break;
     case SDL_PIXELFORMAT_P010:
-    case SDL_PIXELFORMAT_P416:
+    case SDL_PIXELFORMAT_I0FL:
+    case SDL_PIXELFORMAT_I4FL:
         format = SDL_GPU_TEXTUREFORMAT_R16_UNORM;
         break;
     default:
@@ -320,24 +322,16 @@ static bool GPU_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_
     data->format = format;
 
     if (texture->access == SDL_TEXTUREACCESS_STREAMING) {
-        size_t size;
-        data->pitch = texture->w * SDL_BYTESPERPIXEL(texture->format);
-        size = (size_t)texture->h * data->pitch;
-        if (texture->format == SDL_PIXELFORMAT_YV12 ||
-            texture->format == SDL_PIXELFORMAT_IYUV) {
-            // Need to add size for the U and V planes
-            size += 2 * ((texture->h + 1) / 2) * ((data->pitch + 1) / 2);
-        }
-        if (texture->format == SDL_PIXELFORMAT_P408 ||
-            texture->format == SDL_PIXELFORMAT_P416) {
-            // Need to add size for the U and V planes
-            size += 2 * texture->h * data->pitch;
-        }
-        if (texture->format == SDL_PIXELFORMAT_NV12 ||
-            texture->format == SDL_PIXELFORMAT_NV21 ||
-            texture->format == SDL_PIXELFORMAT_P010) {
-            // Need to add size for the U/V plane
-            size += 2 * ((texture->h + 1) / 2) * ((data->pitch + 1) / 2);
+        size_t size, pitch;
+        if (SDL_ISPIXELFORMAT_FOURCC(texture->format)) {
+            if (!SDL_CalculateYUVSize(texture->format, texture->w, texture->h, &size, &pitch)) {
+                SDL_free(data);
+                return false;
+            }
+            data->pitch = (int)pitch;
+        } else {
+            data->pitch = texture->w * SDL_BYTESPERPIXEL(texture->format);
+            size = (size_t)texture->h * data->pitch;
         }
         data->pixels = SDL_calloc(1, size);
         if (!data->pixels) {
@@ -378,7 +372,8 @@ static bool GPU_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_
 
 #ifdef SDL_HAVE_YUV
     if (texture->format == SDL_PIXELFORMAT_YV12 ||
-        texture->format == SDL_PIXELFORMAT_IYUV) {
+        texture->format == SDL_PIXELFORMAT_IYUV ||
+        texture->format == SDL_PIXELFORMAT_I0FL) {
         data->yuv = true;
 
         tci.width = (tci.width + 1) / 2;
@@ -406,13 +401,14 @@ static bool GPU_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_
         }
         SDL_SetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_V_POINTER, data->textureV);
 
-        data->YCbCr_matrix = SDL_GetYCbCRtoRGBConversionMatrix(texture->colorspace, texture->w, texture->h, 8);
+        const int bits_per_pixel = (texture->format == SDL_PIXELFORMAT_I0FL) ? 16 : 8;
+        data->YCbCr_matrix = SDL_GetYCbCRtoRGBConversionMatrix(texture->colorspace, texture->w, texture->h, bits_per_pixel);
         if (!data->YCbCr_matrix) {
             return SDL_SetError("Unsupported YUV colorspace");
         }
     }
-    if (texture->format == SDL_PIXELFORMAT_P408 ||
-        texture->format == SDL_PIXELFORMAT_P416) {
+    if (texture->format == SDL_PIXELFORMAT_I444 ||
+        texture->format == SDL_PIXELFORMAT_I4FL) {
         data->yuv = true;
 
         data->textureU = SDL_GetPointerProperty(create_props, SDL_PROP_TEXTURE_CREATE_GPU_TEXTURE_U_POINTER, NULL);
@@ -437,7 +433,7 @@ static bool GPU_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_
         }
         SDL_SetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_V_POINTER, data->textureU);
 
-        const int bits_per_pixel = (texture->format == SDL_PIXELFORMAT_P408) ? 8 : 16;
+        const int bits_per_pixel = (texture->format == SDL_PIXELFORMAT_I4FL) ? 16 : 8;
         data->YCbCr_matrix = SDL_GetYCbCRtoRGBConversionMatrix(texture->colorspace, texture->w, texture->h, bits_per_pixel);
         if (!data->YCbCr_matrix) {
             return SDL_SetError("Unsupported YUV colorspace");
@@ -446,8 +442,6 @@ static bool GPU_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_
     if (texture->format == SDL_PIXELFORMAT_NV12 ||
         texture->format == SDL_PIXELFORMAT_NV21 ||
         texture->format == SDL_PIXELFORMAT_P010) {
-        int bits_per_pixel;
-
         data->nv12 = true;
 
         data->textureNV = SDL_GetPointerProperty(create_props, SDL_PROP_TEXTURE_CREATE_GPU_TEXTURE_UV_POINTER, NULL);
@@ -469,14 +463,7 @@ static bool GPU_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_
         }
         SDL_SetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_UV_POINTER, data->textureNV);
 
-        switch (texture->format) {
-        case SDL_PIXELFORMAT_P010:
-            bits_per_pixel = 10;
-            break;
-        default:
-            bits_per_pixel = 8;
-            break;
-        }
+        const int bits_per_pixel = (texture->format == SDL_PIXELFORMAT_P010) ? 10 : 8;
         data->YCbCr_matrix = SDL_GetYCbCRtoRGBConversionMatrix(texture->colorspace, texture->w, texture->h, bits_per_pixel);
         if (!data->YCbCr_matrix) {
             return SDL_SetError("Unsupported YUV colorspace");
@@ -581,7 +568,7 @@ static bool GPU_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture, cons
         retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureNV, bpp, rect->x / 2, rect->y / 2, (rect->w + 1) / 2, (rect->h + 1) / 2, UVplane, UVpitch);
 
     } else if (data->yuv) {
-        if (texture->format == SDL_PIXELFORMAT_P408 || texture->format == SDL_PIXELFORMAT_P416) {
+        if (texture->format == SDL_PIXELFORMAT_I444 || texture->format == SDL_PIXELFORMAT_I4FL) {
             const Uint8 *Yplane = (const Uint8 *)pixels;
             const Uint8 *Uplane = Yplane + rect->h * pitch;
             const Uint8 *Vplane = Uplane + rect->h * pitch;
@@ -589,8 +576,8 @@ static bool GPU_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture, cons
             retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureU, bpp, rect->x, rect->y, rect->w, rect->h, Uplane, pitch);
             retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureV, bpp, rect->x, rect->y, rect->w, rect->h, Vplane, pitch);
         } else {
-            int Ypitch = pitch;
-            int UVpitch = ((Ypitch + 1) / 2);
+            const int Ypitch = pitch;
+            const int UVpitch = ((Ypitch / bpp + 1) / 2) * bpp;
             const Uint8 *Yplane = (const Uint8 *)pixels;
             const Uint8 *Uplane = Yplane + rect->h * Ypitch;
             const Uint8 *Vplane = Uplane + ((rect->h + 1) / 2) * UVpitch;
@@ -625,7 +612,7 @@ static bool GPU_UpdateTextureYUV(SDL_Renderer *renderer, SDL_Texture *texture,
     SDL_GPUCommandBuffer *cbuf = renderdata->state.command_buffer;
     SDL_GPUCopyPass *cpass = SDL_BeginGPUCopyPass(cbuf);
     retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->texture, bpp, rect->x, rect->y, rect->w, rect->h, Yplane, Ypitch);
-    if (texture->format == SDL_PIXELFORMAT_P408 || texture->format == SDL_PIXELFORMAT_P416) {
+    if (texture->format == SDL_PIXELFORMAT_I444 || texture->format == SDL_PIXELFORMAT_I4FL) {
         retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureU, bpp, rect->x, rect->y, rect->w, rect->h, Uplane, Upitch);
         retval &= GPU_UpdateTextureInternal(renderdata, cpass, data->textureV, bpp, rect->x, rect->y, rect->w, rect->h, Vplane, Vpitch);
     } else {
@@ -928,7 +915,7 @@ static void CalculateAdvancedShaderConstants(SDL_Renderer *renderer, const SDL_R
         break;
     case SDL_PIXELFORMAT_YV12:
     case SDL_PIXELFORMAT_IYUV:
-    case SDL_PIXELFORMAT_P408:
+    case SDL_PIXELFORMAT_I444:
         constants->texture_type = TEXTURETYPE_YUV;
         constants->input_type = INPUTTYPE_SRGB;
         break;
@@ -944,7 +931,8 @@ static void CalculateAdvancedShaderConstants(SDL_Renderer *renderer, const SDL_R
         constants->texture_type = TEXTURETYPE_NV12;
         constants->input_type = INPUTTYPE_HDR10;
         break;
-    case SDL_PIXELFORMAT_P416:
+    case SDL_PIXELFORMAT_I0FL:
+    case SDL_PIXELFORMAT_I4FL:
         constants->texture_type = TEXTURETYPE_YUV;
         constants->input_type = INPUTTYPE_HDR10;
         break;
@@ -1908,11 +1896,12 @@ static bool GPU_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_P
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_INDEX8);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_YV12);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_IYUV);
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_P408);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_I444);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_NV12);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_NV21);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_P010);
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_P416);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_I0FL);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_I4FL);
 
     SDL_SetNumberProperty(SDL_GetRendererProperties(renderer), SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 16384);
 
