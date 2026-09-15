@@ -16,7 +16,7 @@ static SDL_Renderer *renderer = NULL;
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 #define NUM_POINTS 10
-static SDL_FPoint points[NUM_POINTS];
+// static SDL_FPoint points[NUM_POINTS];
 
 void DrawCircle(SDL_Renderer* renderer, int32_t centreX, int32_t centreY, int32_t radius)
 {
@@ -96,30 +96,15 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     const float scale = ((float) (((int) (now % 1000)) - 500) / 500.0f) * direction;
 
     // Render Circle (not working)
-    // DrawCircle(renderer, 50, 50, 50);
-
-    // Render a point
-    SDL_RenderPoint(renderer, 100, 100);
-    SDL_RenderPoint(renderer, 100.1, 100.1);
-    SDL_RenderPoint(renderer, 100.2, 100.2);
-    SDL_RenderPoint(renderer, 100.3, 100.3);
-
-    // Testing out rendering points (working)
-    /*
-    SDL_FPoint points[NUM_POINTS];
-    SDL_RenderPoints(renderer, points, 100);
-    for (int i = 0; i < SDL_arraysize(points); ++i) {
-        points[i].x = ((float) 100);
-        points[i].y = ((float) 100);
-    }
-    */
 
     /* as you can see from this, rendering draws over whatever was drawn before it. */
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);  
     SDL_RenderClear(renderer);  /* start with a blank canvas. */
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);  /* white, full alpha */
-    SDL_RenderPoints(renderer, points, 100);
-
+    /* 
+    SDL_RenderPoint(renderer, 100, 100);
+    */
+    DrawCircle(renderer, 50, 50, 50);
 
     SDL_RenderPresent(renderer);  /* put it all on the screen! */
 
