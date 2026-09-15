@@ -16,7 +16,8 @@ static SDL_Renderer *renderer = NULL;
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 #define NUM_POINTS 10
-// static SDL_FPoint points[NUM_POINTS];
+#define vertLen 3
+SDL_Vertex vert[vertLen];
 
 void DrawCircle(SDL_Renderer* renderer, int32_t centreX, int32_t centreY, int32_t radius)
 {
@@ -30,7 +31,6 @@ void DrawCircle(SDL_Renderer* renderer, int32_t centreX, int32_t centreY, int32_
 
     while (x >= y)
     {
-        SDL_RenderPoint(renderer, 10, 10);
         SDL_RenderPoint(renderer, centreX + x, centreY - y);
         SDL_RenderPoint(renderer, centreX + x, centreY + y);
         SDL_RenderPoint(renderer, centreX - x, centreY - y);
@@ -60,6 +60,30 @@ void DrawCircle(SDL_Renderer* renderer, int32_t centreX, int32_t centreY, int32_
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
     SDL_SetAppMetadata("Example Renderer Rectangles", "1.0", "com.example.renderer-rectangles");
+
+    // Vertex experiment
+    // center
+    vert[0].position.x = 400;
+    vert[0].position.y = 150;
+    vert[0].color.r = 1.0;
+    vert[0].color.g = 0.0;
+    vert[0].color.b = 0.0;
+    vert[0].color.a = 1.0;
+    // left
+    vert[1].position.x = 200;
+    vert[1].position.y = 450;
+    vert[1].color.r = 0.0;
+    vert[1].color.g = 0.0;
+    vert[1].color.b = 1.0;
+    vert[1].color.a = 1.0;
+    // right
+    vert[2].position.x = 600;
+    vert[2].position.y = 450;
+    vert[2].color.r = 0.0;
+    vert[2].color.g = 1.0;
+    vert[2].color.b = 0.0;
+    vert[2].color.a = 1.0;
+
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
@@ -95,16 +119,23 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     const float direction = ((now % 2000) >= 1000) ? 1.0f : -1.0f;
     const float scale = ((float) (((int) (now % 1000)) - 500) / 500.0f) * direction;
 
-    // Render Circle (not working)
-
     /* as you can see from this, rendering draws over whatever was drawn before it. */
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);  
     SDL_RenderClear(renderer);  /* start with a blank canvas. */
+
+    // SDL_RenderGeometry Test
+    SDL_RenderGeometry(renderer, NULL, vert, vertLen, NULL, 0);
+
+    // Render our circles
+    // White circle
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);  /* white, full alpha */
-    /* 
-    SDL_RenderPoint(renderer, 100, 100);
-    */
-    DrawCircle(renderer, 50, 50, 50);
+    DrawCircle(renderer, 200, 200, 50 * scale);
+    // Red circle
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);  /* white, full alpha */
+    DrawCircle(renderer, 100, 100, 50 * scale);
+    // Blue circle
+    SDL_SetRenderDrawColor(renderer, 0, 0, 255, SDL_ALPHA_OPAQUE);  /* white, full alpha */
+    DrawCircle(renderer, 400, 400, 150 * scale);
 
     SDL_RenderPresent(renderer);  /* put it all on the screen! */
 
