@@ -13,6 +13,7 @@
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
 static SDL_Texture *texture = NULL;
+static SDL_Texture *red_texture = NULL;
 static int texture_width = 0;
 static int texture_height = 0;
 
@@ -37,6 +38,12 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         return SDL_APP_FAILURE;
     }
     SDL_SetRenderLogicalPresentation(renderer, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    red_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STATIC, 64, 64);
+    Uint32 pixels[64 * 64];
+    for (int i = 0; i < 64 * 64; i++) {
+        pixels[i] = 0xFF0000FF;  // opaque red
+    }
+    SDL_UpdateTexture(red_texture, NULL, pixels, 64 * sizeof(Uint32));
 
     /* Textures are pixel data that we upload to the video hardware for fast drawing. Lots of 2D
        engines refer to these as "sprites." We'll do a static texture (upload once, draw many
@@ -53,8 +60,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 
     SDL_free(png_path);  /* done with this, the file is loaded. */
 
-    texture_width = surface->w;
-    texture_height = surface->h;
+    texture_width = surface->w / 6;
+    texture_height = surface->h / 6;
 
     texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (!texture) {
@@ -81,10 +88,13 @@ SDL_AppResult SDL_AppIterate(void *appstate)
 {
     SDL_FPoint center;
     SDL_FRect dst_rect;
+    SDL_FRect rects;
+    SDL_Surface *surface = NULL;
+
     const Uint64 now = SDL_GetTicks();
 
     /* we'll have a texture rotate around over 2 seconds (2000 milliseconds). 360 degrees in a circle! */
-    const float rotation = (((float) ((int) (now % 2000))) / 2000.0f) * 360.0f;
+    const float rotation = (((float) ((int) (now % 3000))) / 3000.0f) * 360.0f;
 
     /* as you can see from this, rendering draws over whatever was drawn before it. */
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);  /* black, full alpha */
@@ -98,7 +108,17 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     /* rotate it around the center of the texture; you can rotate it from a different point, too! */
     center.x = texture_width / 2.0f;
     center.y = texture_height / 2.0f;
-    SDL_RenderTextureRotated(renderer, texture, NULL, &dst_rect, rotation, &center, SDL_FLIP_NONE);
+    SDL_RenderTextureRotated(renderer, texture, NULL, &dst_rect, -rotation, &center, SDL_FLIP_NONE);
+
+    // Create a rectangle for use in rotation
+    /* Let's draw a single rectangle (square, really). */
+    rects.x = rects.y = 100;
+    rects.w = rects.h = 100;
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);  /* red, full alpha */
+    SDL_FPoint rect_center = { rects.w / 2.0f, rects.h / 2.0f }; // Own center
+    // SDL_RenderRect(renderer, &rects);
+    // SDL_RenderFillRect(renderer, &rects);
+    SDL_RenderTextureRotated(renderer, red_texture, NULL, &rects, rotation, &rect_center, SDL_FLIP_NONE);
 
     SDL_RenderPresent(renderer);  /* put it all on the screen! */
 
