@@ -14,7 +14,7 @@ static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
 static SDL_Texture *texture = NULL;
 
-#define TEXTURE_SIZE 150
+#define TEXTURE_SIZE 300
 
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
